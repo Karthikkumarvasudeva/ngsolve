@@ -3,6 +3,9 @@
 #include "h1amg.hpp"
 #include "hcurlamg.hpp"
 
+#include <special_matrix.hpp>
+#include <jacobi.hpp>
+
 namespace ngcomp
 {
   shared_ptr<SparseMatrixTM<double>> ToSparseMatrix( const Embedding & e )
@@ -467,7 +470,7 @@ namespace ngcomp
           for(auto fi : Range(faces))
             {
               if(neighbours[fi][0] != -1 && neighbours[fi][1] != -1) continue;
-              int te1;
+              int te1 = 0;
               for(auto e : f2e[faces[fi]])
                 {
                   if(ei == e) continue;
@@ -478,7 +481,7 @@ namespace ngcomp
                 {
                   if(neighbours[fo][0] != -1 && neighbours[fo][1] != -1) continue;
                   if(neighbours[fi][0] == fo || fi == fo) continue;
-                  int te2;
+                  int te2 = 0;
                   for(auto e : f2e[faces[fo]])
                     {
                       if(ei == e) continue;
@@ -512,7 +515,7 @@ namespace ngcomp
                   if(j == -1) continue;
                   if(i < j)
                     {
-                      int top_edge1, bot_edge1, top_edge2, bot_edge2;
+                      int top_edge1=-1, bot_edge1=-1, top_edge2=-1, bot_edge2=-1;
                       for(auto e1 : f2e[faces[i]])
                         {
                           if(e1 == ei) continue;

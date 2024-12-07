@@ -71,7 +71,7 @@ namespace ngfem
     /// the name of the element family
     virtual string ClassName() const;
 
-    virtual void SetVertexNumbers (FlatArray<int> vnums);
+    virtual FiniteElement * SetVertexNumbers (FlatArray<int> vnums);
     
     virtual IntegrationRule GetIR (int order) const;
 
@@ -103,13 +103,12 @@ namespace ngfem
   {
   protected:
     /// pointers to the components
-    // ArrayMem<const FiniteElement*,10> fea;
-    FlatArray<const FiniteElement*> fea;
+    FlatArray<FiniteElement*> fea;
     bool all_the_same{true};
 
   public:
     /// initialize with pointers to components, copy pointers
-    CompoundFiniteElement (FlatArray<const FiniteElement*> afea);
+    CompoundFiniteElement (FlatArray<FiniteElement*> afea);
 
     HD virtual ELEMENT_TYPE ElementType() const override { return fea[0]->ElementType(); }
     /// number of components
@@ -130,10 +129,11 @@ namespace ngfem
     /// the name of the element family
     virtual string ClassName() const override { return "CompoundFiniteElement"; }
     
-    virtual void SetVertexNumbers (FlatArray<int> vnums) override
+    virtual CompoundFiniteElement * SetVertexNumbers (FlatArray<int> vnums) override
     {
       for (auto pfel : fea)
-        const_cast<FiniteElement*>(pfel) -> SetVertexNumbers(vnums);
+        pfel -> SetVertexNumbers(vnums);
+      return this;
     }
 
     HD virtual bool ComplexShapes() const override;
@@ -174,7 +174,7 @@ namespace ngfem
     /// the name of the element family
     virtual string ClassName() const override { return "VectorFiniteElement"; }
 
-    virtual void SetVertexNumbers (FlatArray<int> vnums) override;
+    virtual VectorFiniteElement * SetVertexNumbers (FlatArray<int> vnums) override;
 
     virtual void Print (ostream & ost) const override;
 

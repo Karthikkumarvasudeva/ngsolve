@@ -21,6 +21,8 @@
 #include <diffop_impl.hpp>
 #include <fesconvert.hpp>
 
+#include <special_matrix.hpp>   // for embedding
+
 using namespace ngmg; 
 
 
@@ -212,7 +214,11 @@ namespace ngcomp
     {
       Flags flagsL2;
       flagsL2.SetFlag ("order", afes.GetOrder());
-      if(std::none_of(afes.DefinedOn(VOL).begin(), afes.DefinedOn(VOL).end(), [](bool b) { return b; }))
+      bool hasvol=false;
+      for (auto regid : Range(afes.GetMeshAccess()->GetNRegions(VOL)))
+        if (afes.DefinedOn(VOL,regid)) hasvol=true;
+      // if(std::none_of(afes.DefinedOn(VOL).begin(), afes.DefinedOn(VOL).end(), [](bool b) { return b; }))
+      if(!hasvol)
         {
           fesL2 = CreateFESpace("l2surf", afes.GetMeshAccess(), flagsL2);
           vb = BND;
@@ -535,6 +541,9 @@ into the wirebasket.
     docu.Arg("hoprolongation") = "bool = false\n"
       "  (experimental, only trigs) creates high order prolongation,\n"
       "  and switches off low-order space";
+    docu.Arg("orderinner");
+    docu.Arg("orderedge");
+    docu.Arg("orderface");    
     return docu;
   }
 
@@ -2548,6 +2557,10 @@ into the wirebasket.
     docu.Arg("dirichletz_bbbnd") = "regexpr\n"
       "  Dirichlet bbboundary for the third component";
 
+    docu.Arg("orderinner");
+    docu.Arg("orderedge");
+    docu.Arg("orderface");    
+    
     return docu;
   }
 

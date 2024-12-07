@@ -5,9 +5,13 @@
 /*********************************************************************/
 
  
-#include <la.hpp>
+// #include <la.hpp>
 #include "../linalg/mumpsinverse.hpp"
-#include <parallelngs.hpp>
+#include "parallelvector.hpp"
+#include "parallel_matrices.hpp"
+#include <diagonalmatrix.hpp>
+
+// #include <parallelngs.hpp>
 
 
 namespace ngla
@@ -260,8 +264,6 @@ namespace ngla
 	matrix->SetInverseType (mat.GetInverseType());
 	inv = matrix->InverseMatrix ();
       }
-
-    // NG_MPI_Barrier (ngs_comm);
   }
 
   template <typename TM>
@@ -291,17 +293,14 @@ namespace ngla
 	Array<TV> lx (select.Size());
 	for (int i = 0; i < select.Size(); i++)
 	  lx[i] = fx(select[i]);
-	
-	NG_MPI_Request request = comm.ISend (lx, 0, NG_MPI_TAG_SOLVE);
-	NG_MPI_Request_free (&request);
+
+	NgMPI_Request(comm.ISend (lx, 0, NG_MPI_TAG_SOLVE)).Wait();
 
 	// only for MUMPS:
 	if (inv)
 	  y = (*inv) * x;
 	
-	request = comm.IRecv (lx, 0, NG_MPI_TAG_SOLVE);
-	NG_MPI_Wait (&request, NG_MPI_STATUS_IGNORE);
-
+	NgMPI_Request(comm.IRecv (lx, 0, NG_MPI_TAG_SOLVE)).Wait();
 
 	for (int i = 0; i < select.Size(); i++)
 	  fy(select[i]) += s * lx[i];
@@ -339,15 +338,15 @@ namespace ngla
 
 	hy = (*inv) * hx;
 
-	Array<NG_MPI_Request> requ;
+        NgMPI_Requests requ;
 	for (int src = 1; src < ntasks; src++)
 	  {
 	    FlatArray<int> selecti = loc2glob[src];
 	    for (int j = 0; j < selecti.Size(); j++)
 	      exdata[src][j] = hy(selecti[j]);
-	    requ.Append (comm.ISend (exdata[src], src, NG_MPI_TAG_SOLVE));
+	    requ += comm.ISend (exdata[src], src, NG_MPI_TAG_SOLVE);
 	  }
-	MyMPI_WaitAll (requ);
+	requ.WaitAll();
       }
 
     // if (is_x_cum)
@@ -838,21 +837,6 @@ namespace ngla
   {
     y.Distribute();
     size_t count = 0;
-    /*
-      for (auto p:paralleldofs->GetDistantProcs()) {
-      auto exdofs = paralleldofs->GetExchangeDofs(p);
-      if (p<MyMPI_GetId(paralleldofs->GetCommunicator())) {
-      for (auto k:Range(exdofs.Size())) {
-      y.FVDouble()[count++] -= s*x.FVDouble()[exdofs[k]];
-      }
-      }
-      else {
-      for (auto k:Range(exdofs.Size())) {
-      y.FVDouble()[count++] += s*x.FVDouble()[exdofs[k]];
-      }
-      }
-      }
-    */
     auto me = paralleldofs->GetCommunicator().Rank();
     auto fx = x.FVDouble();
     auto fy = y.FVDouble();

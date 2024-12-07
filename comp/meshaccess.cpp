@@ -1022,8 +1022,6 @@ namespace ngcomp
     */
 
     ndomains++;
-    
-    // ndomains = MyMPI_AllReduce (ndomains, NG_MPI_MAX, GetCommunicator());
     ndomains = GetCommunicator().AllReduce (ndomains, NG_MPI_MAX);
     
     pml_trafos.SetSize(ndomains);
@@ -1647,13 +1645,15 @@ namespace ngcomp
             // if there is refinement at that level
             bool refine = code >> ref_level;
             // and I'm not a child
-            refine &= ~(code & 1);
+            // refine &= ~(code & 1);
+            refine &= !bool(code & 1);
             SetRefinementFlag(ei,refine);
             if(refine)
               elmap.Append(child_elnr++);
 
             // will there be refinement at the next level?
-            any_next |= code >> (ref_level+1);
+            // any_next |= code >> (ref_level+1);
+            any_next |= bool(code >> (ref_level+1));
           }
         Refine(true);
         auto old_size = elmap.Size();
@@ -1747,7 +1747,7 @@ namespace ngcomp
          // dynamic_cast<LocalHeap&> (lh)); 
     
     else if ( el.is_curved )
-
+      
       eltrans = new (lh) Ng_ElementTransformation<DIM-1,DIM> (this, el.GetType(), 
                                                               ElementId(BND,elnr), el.GetIndex()); 
     

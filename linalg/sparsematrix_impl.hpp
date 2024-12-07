@@ -155,6 +155,44 @@ namespace ngla
     : SparseMatrixTM<TM> (std::move(agraph))
   { ; }
  
+
+
+  template <class TM, class TV_ROW, class TV_COL>  
+  shared_ptr<BaseJacobiPrecond> SparseMatrix<TM,TV_ROW,TV_COL> :: 
+  CreateJacobiPrecond (shared_ptr<BitArray> inner) const
+  {
+    // if constexpr(mat_traits<TM>::HEIGHT != mat_traits<TM>::WIDTH) return nullptr;
+    if constexpr(ngbla::Height<TM>() != ngbla::Width<TM>()) return nullptr;
+    else if constexpr(ngbla::Height<TM>() > MAX_SYS_DIM) {
+      throw Exception(string("MAX_SYS_DIM = ")+to_string(MAX_SYS_DIM)+string(", need ")+to_string(mat_traits<TM>::HEIGHT));
+      return nullptr;
+    }
+    else return make_shared<JacobiPrecond<TM,TV_ROW,TV_COL>> (*this, inner);
+  }
+  
+  template <class TM, class TV_ROW, class TV_COL>    
+  shared_ptr<BaseBlockJacobiPrecond> SparseMatrix<TM,TV_ROW,TV_COL> :: 
+  CreateBlockJacobiPrecond (shared_ptr<Table<int>> blocks,
+                            const BaseVector * constraint,
+                            bool parallel,
+                            shared_ptr<BitArray> freedofs) const
+  { 
+    // if constexpr(mat_traits<TM>::HEIGHT != mat_traits<TM>::WIDTH) return nullptr;
+    if constexpr(ngbla::Height<TM>() != ngbla::Width<TM>()) return nullptr;
+    else if constexpr(ngbla::Height<TM>() > MAX_SYS_DIM) {
+      throw Exception(string("MAX_SYS_DIM = ")+to_string(MAX_SYS_DIM)+string(", need ")+to_string(ngbla::Height<TM>()));
+      return nullptr;
+    }
+    else
+      // return make_shared<BlockJacobiPrecond<TM,TV_ROW,TV_COL>> (*this, blocks, parallel);
+      
+      return make_shared<BlockJacobiPrecond<TM,TV_ROW,TV_COL>>
+        ( dynamic_pointer_cast<const SparseMatrix>
+          (this->shared_from_this()),
+          blocks, parallel);
+  }
+  
+
   
   template <class TM, class TV_ROW, class TV_COL>
   void SparseMatrix<TM,TV_ROW,TV_COL> ::
@@ -602,7 +640,7 @@ namespace ngla
   
   template <class TM>
   shared_ptr<BaseSparseMatrix> SparseMatrixTM<TM> ::
-  CreateTransposeTM (const function<shared_ptr<SparseMatrixTM<decltype(Trans(TM()))>>(const Array<int>&,int)> & creator) const
+  CreateTransposeTM (const function<shared_ptr<SparseMatrixTM<decltype(ngbla::Trans(TM()))>>(const Array<int>&,int)> & creator) const
   {
     Array<int> cnt(this->Width());
     cnt = 0;
@@ -750,7 +788,34 @@ namespace ngla
   {
     ; 
   }
+  
 
+  template <class TM, class TV>
+  shared_ptr<BaseJacobiPrecond>
+  SparseMatrixSymmetric<TM,TV> :: CreateJacobiPrecond (shared_ptr<BitArray> inner) const 
+  { 
+    return make_shared<JacobiPrecondSymmetric<TM,TV>> (*this, inner);
+  }
+  
+
+  template <class TM, class TV>  
+  shared_ptr<BaseBlockJacobiPrecond>
+  SparseMatrixSymmetric<TM,TV> :: CreateBlockJacobiPrecond (shared_ptr<Table<int>> blocks,
+                                                            const BaseVector * constraint,
+                                                            bool parallel,
+                                                            shared_ptr<BitArray> freedofs) const
+  { 
+    // return make_shared<BlockJacobiPrecondSymmetric<TM,TV>> (*this, blocks);
+    return make_shared<BlockJacobiPrecondSymmetric<TM,TV>>
+      ( dynamic_pointer_cast<const SparseMatrixSymmetric>
+        (this->shared_from_this()),
+        blocks);
+  }
+  
+
+
+
+  
   template <class TM, class TV>
   void SparseMatrixSymmetric<TM,TV> :: 
   MultAdd (double s, const BaseVector & x, BaseVector & y) const

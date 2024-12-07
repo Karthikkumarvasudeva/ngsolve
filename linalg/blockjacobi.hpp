@@ -7,6 +7,9 @@
 /* Date:   06. Oct. 96                                                     */
 /* *************************************************************************/
 
+
+#include "sparsematrix.hpp"
+
 namespace ngla
 {
 
@@ -172,6 +175,7 @@ namespace ngla
       return { MemoryUsage ("BlockJac", nels*sizeof(TM), blocktable->Size()) };
     }
 
+    virtual shared_ptr<BaseSparseMatrix> CreateSparseMatrix() const override;
     const Array<FlatMatrix<TM>> & GetInverses() const { return invdiag; }
     const Array<TM> & MatrixData() const { return bigmem; } 
   };

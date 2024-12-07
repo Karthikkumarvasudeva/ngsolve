@@ -15,6 +15,7 @@
 #include <l2hofetp.hpp>
 #include <bdbequations.hpp>
 #include <diffop_impl.hpp>
+#include <diagonalmatrix.hpp>
 
 using namespace ngmg;
 
@@ -192,7 +193,7 @@ namespace ngcomp
     array<Matrix<double>,32> trigprolsL;
     array<Matrix<double>,32> trigprolsR;
     Array<int> trig_creation_class;  // which prol to use ?
-
+    bool haveprols=false;
   private:
     int GetClassNr (FlatArray<size_t> verts)
     {
@@ -224,6 +225,12 @@ namespace ngcomp
       : ma(ama), order(aorder), first_dofs(afirst_dofs) 
     {
       vb = ma->GetDimension() == 3 ? BND : VOL;
+    }
+    
+    void CalcMatrices()
+    {
+      if (haveprols) return;
+      haveprols=true;
       for (int classnr = 0; classnr < 32; classnr++)
         {
           Array<size_t> verts{GetClassRealization(classnr)};
@@ -297,6 +304,8 @@ namespace ngcomp
           trig_creation_class = 0;
           return;
         }
+
+      CalcMatrices();
       
       trig_creation_class.SetSize(ne);
       Array<IVec<3, size_t>> trig_creation_verts(ne);
@@ -407,7 +416,7 @@ namespace ngcomp
     array<Matrix<double>,1024> tetprolsL;
     array<Matrix<double>,1024> tetprolsR;
     Array<int> tet_creation_class;  // which prol to use ?
-
+    bool haveprols=false;
   private:
     int GetClassNr (FlatArray<size_t> verts)
     {
@@ -437,9 +446,30 @@ namespace ngcomp
     ///
     L2HoProlongationTet(shared_ptr<MeshAccess> ama, int aorder, const Array<int> & afirst_dofs)
       : ma(ama), order(aorder), first_dofs(afirst_dofs) 
+    { }
+
+    void CalcMatrices()
     {
+      static Timer t("L2HOProlTet calc matrices"); RegionTimer reg(t);
+      if (haveprols) return;
+      haveprols=true;
+
+      IntegrationRule ir(ET_TET, 2*order);
+      L2HighOrderFE<ET_TET> fel(order);      
+      size_t ndof = fel.GetNDof();
+      Matrix massfL(ndof, ndof), massfcL(ndof, ndof);
+      Matrix massfR(ndof, ndof), massfcR(ndof, ndof);          
+
+      Matrix shapesf(ndof, ir.Size());
+      Matrix shapesfw(ndof, ir.Size());
+      Matrix shapesc(ndof, ir.Size());
+
+      
       for (int classnr = 0; classnr < 1024; classnr++)
         {
+          tetprolsL[classnr].SetSize(ndof, ndof);
+          tetprolsR[classnr].SetSize(ndof, ndof);
+          
           Array<size_t> verts{GetClassRealization(classnr)};
           
           size_t vertsc[5] = { verts[0], verts[1], verts[2], verts[3] };
@@ -455,47 +485,33 @@ namespace ngcomp
           felfL.SetVertexNumbers (vertsfL);
           L2HighOrderFE<ET_TET> felfR(order);
           felfR.SetVertexNumbers (vertsfR);
-          
-          IntegrationRule ir(ET_TET, 2*order);
-          size_t ndof = felfL.GetNDof();
-          Matrix massfL(ndof, ndof), massfcL(ndof, ndof);
-          Matrix massfR(ndof, ndof), massfcR(ndof, ndof);          
-          Vector shapef(ndof), shapec(ndof);
-          massfL = 0.;
-          massfcL = 0.;
-          massfR = 0.;
-          massfcR = 0.;
-          
-          for (IntegrationPoint ip : ir)
+
+          IntegrationRule ircl, ircr;
+          for (auto i : Range(ir))
             {
-              IntegrationPoint ipcL(0.5*ip(0), ip(1), ip(2));
-              IntegrationPoint ipcR(0.5*(1+ip(0)-ip(1)-ip(2)), ip(1), ip(2));              
-
-              felc.CalcShape (ipcL, shapec);
-              felfL.CalcShape (ip, shapef);
-
-              massfL += ip.Weight() * shapef * Trans(shapef);
-              massfcL += ip.Weight() * shapef * Trans(shapec);
-
-              felc.CalcShape (ipcR, shapec);
-              felfR.CalcShape (ip, shapef);
-              massfR += ip.Weight() * shapef * Trans(shapef);
-              massfcR += ip.Weight() * shapef * Trans(shapec);
+              auto ip = ir[i];
+              ircl += IntegrationPoint(0.5*ip(0), ip(1), ip(2));
+              ircr += IntegrationPoint(0.5*(1+ip(0)-ip(1)-ip(2)), ip(1), ip(2));              
             }
-          CalcInverse (massfL);
-          tetprolsL[classnr].SetSize(ndof, ndof);
-          tetprolsL[classnr] = massfL * massfcL;
-          CalcInverse (massfR);
-          tetprolsR[classnr].SetSize(ndof, ndof);
-          tetprolsR[classnr] = massfR * massfcR;
+          
+          felc.CalcShape(ircl, shapesc);
+          felfL.CalcShape(ir, shapesf);
+          for (auto i : Range(ir))
+            shapesfw.Col(i) = ir[i].Weight()*shapesf.Col(i);
+          massfL = shapesfw * Trans(shapesf);
+          massfcL = shapesfw * Trans(shapesc);
+          for (size_t i = 0; i < ndof; i++)
+            tetprolsL[classnr].Row(i) = 1.0/massfL(i,i) * massfcL.Row(i);
+              
+          felc.CalcShape(ircr, shapesc);
+          felfR.CalcShape(ir, shapesf);
+          for (auto i : Range(ir))
+            shapesfw.Col(i) = ir[i].Weight()*shapesf.Col(i);
+          massfR = shapesfw * Trans(shapesf);
+          massfcR = shapesfw * Trans(shapesc);
+          for (size_t i = 0; i < ndof; i++)
+            tetprolsR[classnr].Row(i) = 1.0/massfR(i,i) * massfcR.Row(i);
         }
-
-      /*
-      for (auto & m : trigprolsL)
-        cout << m << endl;
-      for (auto & m : trigprolsR)
-        cout << m << endl;
-      */
     }
 
     ///
@@ -521,6 +537,8 @@ namespace ngcomp
           return;
         }
 
+      CalcMatrices();
+      
       tet_creation_class.SetSize(ne);
       Array<IVec<4, size_t>> tet_creation_verts(ne);
       for (size_t i = oldne; i < ne; i++)
@@ -882,7 +900,8 @@ global system.
       ndlevel.Append (ndof);
     ndlevel.Last() = ndof;
     */
-    if(low_order_space) prol->Update(*this);
+    // if(low_order_space) prol->Update(*this);
+    if (prol) prol->Update(*this);
 
     UpdateCouplingDofArray();
   }
@@ -3649,20 +3668,20 @@ WIRE_BASKET via the flag 'lowest_order_wb=True'.
               massfcR += ip.Weight() * mshapef * Trans(mshapec);
             }
 
-          Matrix<> vertid = {{1, 0}, {0, 1}, {0, 0}};
-          Matrix<> vertl = {{0.5, 0}, {0, 1}, {0, 0}};
-          Matrix<> vertr = {{1 , 0}, {0, 1}, {0.5, 0}};
-
-          FE_ElementTransformation<2, 2> trafoid(ET_TRIG, vertid);
-          FE_ElementTransformation<2, 2> trafol(ET_TRIG, vertl);
-          FE_ElementTransformation<2, 2> trafor(ET_TRIG, vertr);
-
-          VectorFiniteElement vecfc(felc, 2);
-          VectorFiniteElement vecfL(felfL, 2);
-          VectorFiniteElement vecfR(felfR, 2);
-
-          if (piola)
-            for (IntegrationPoint ip : ir)
+        Matrix<> vertid = {{1, 0}, {0, 1}, {0, 0}};
+        Matrix<> vertl = {{0.5, 0}, {0, 1}, {0, 0}};
+        Matrix<> vertr = {{1 , 0}, {0, 1}, {0.5, 0}};
+        
+        FE_ElementTransformation<2, 2> trafoid(ET_TRIG, vertid);
+        FE_ElementTransformation<2, 2> trafol(ET_TRIG, vertl);
+        FE_ElementTransformation<2, 2> trafor(ET_TRIG, vertr);
+        
+        VectorFiniteElement vecfc(felc, 2);
+        VectorFiniteElement vecfL(felfL, 2);
+        VectorFiniteElement vecfR(felfR, 2);
+        
+        if (piola)
+          for (IntegrationPoint ip : ir)
             {
               IntegrationPoint ipcL(0.5*ip(0), ip(1));
               IntegrationPoint ipcR(0.5*(1+ip(0)-ip(1)), ip(1));              
@@ -3680,17 +3699,17 @@ WIRE_BASKET via the flag 'lowest_order_wb=True'.
 
               DiffOpIdVectorL2Piola2<2>::GenerateMatrix(vecfc, mipcr, Trans(mshapec), lh);
               DiffOpIdVectorL2Piola2<2>::GenerateMatrix(vecfR, mipfr, Trans(mshapef), lh);
-
+              
               massfR += ip.Weight() * mshapef * Trans(mshapef);
               massfcR += ip.Weight() * mshapef * Trans(mshapec);
             }
-
-          CalcInverse (massfL);
-          trigprolsL[classnr].SetSize(dim*ndof, dim*ndof);
-          trigprolsL[classnr] = massfL * massfcL;
-          CalcInverse (massfR);
-          trigprolsR[classnr].SetSize(dim*ndof, dim*ndof);
-          trigprolsR[classnr] = massfR * massfcR;
+        
+        CalcInverse (massfL);
+        trigprolsL[classnr].SetSize(dim*ndof, dim*ndof);
+        trigprolsL[classnr] = massfL * massfcL;
+        CalcInverse (massfR);
+        trigprolsR[classnr].SetSize(dim*ndof, dim*ndof);
+        trigprolsR[classnr] = massfR * massfcR;
       }
     }
 

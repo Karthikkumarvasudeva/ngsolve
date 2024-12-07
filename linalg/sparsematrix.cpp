@@ -7,8 +7,9 @@
 
 #define FILE_SPARSEMATRIX_CPP
 
-#include <la.hpp>
-
+#include "sparsematrix.hpp"
+#include "jacobi.hpp"
+#include "blockjacobi.hpp"
 #include "pardisoinverse.hpp"
 #include "umfpackinverse.hpp"
 #include "superluinverse.hpp"
@@ -138,6 +139,7 @@ namespace ngla
     firsti.Swap (graph.firsti);
     colnr.Swap (graph.colnr);
     CalcBalancing ();
+    mem_tracer = std::move(graph.mem_tracer);
   }
 
 

@@ -1,9 +1,6 @@
-// #ifdef PARALLEL
-
-
-#include <parallelngs.hpp>
-#include <la.hpp>
-
+// #include <parallelngs.hpp>
+// #include <la.hpp>
+#include "parallelvector.hpp"
 
 namespace ngla
 {
@@ -99,7 +96,7 @@ namespace ngla
     }
 
 
-    void IRecvVec ( int dest, NG_MPI_Request & request ) override
+    NgMPI_Request IRecvVec ( int dest ) override
     {
       cout << "irecvec, and throw" << endl;
       throw Exception("ParallelRangeVector, don't know how to IRecVec");
@@ -224,58 +221,39 @@ namespace ngla
     static Timer t("ParallelVector - Cumulate");
     RegionTimer reg(t);
     
-    // #ifdef PARALLEL
     if (status != DISTRIBUTED) return;
     
-    // int ntasks = paralleldofs->GetNTasks();
     auto exprocs = paralleldofs->GetDistantProcs();
     
-    int nexprocs = exprocs.Size();
-    
     ParallelBaseVector * constvec = const_cast<ParallelBaseVector * > (this);
+    sreqs.Reset();
+    rreqs.Reset();
     
-    for (int idest = 0; idest < nexprocs; idest ++ ) 
-      constvec->ISend (exprocs[idest], sreqs[idest] );
-    for (int isender=0; isender < nexprocs; isender++)
-      constvec -> IRecvVec (exprocs[isender], rreqs[isender] );
-    
-    // if (rreqs.Size()) { // apparently Startall with 0 requests fails b/c invalid request ??
-    //   NG_MPI_Startall(rreqs.Size(), &rreqs[0]);
-    //   NG_MPI_Startall(sreqs.Size(), &sreqs[0]);
-    // }
+    for (auto proc : exprocs)
+      sreqs += constvec -> ISend (proc);
+    for (auto proc : exprocs)
+      rreqs += constvec -> IRecvVec (proc);
 
-    MyMPI_WaitAll (sreqs);
+    sreqs.WaitAll();
     
     // cumulate
-    for (int cntexproc=0; cntexproc < nexprocs; cntexproc++)
-      {
-	int isender = MyMPI_WaitAny (rreqs);
-	constvec->AddRecvValues(exprocs[isender]);
-      } 
+    for (int cnt=0; cnt < exprocs.Size(); cnt++)
+      constvec->AddRecvValues(exprocs[rreqs.WaitAny()]);
 
     SetStatus(CUMULATED);
-    // #endif
   }
   
 
 
-
-  void ParallelBaseVector :: ISend ( int dest, NG_MPI_Request & request ) const
+  NgMPI_Request ParallelBaseVector :: ISend ( int dest ) const
   {
+    NG_MPI_Request request;
 #ifdef PARALLEL
     NG_MPI_Datatype mpi_t = this->paralleldofs->GetMPI_Type(dest);
     NG_MPI_Isend( Memory(), 1, mpi_t, dest, NG_MPI_TAG_SOLVE, this->paralleldofs->GetCommunicator(), &request);
 #endif
+    return request;
   }
-
-  /*
-  void ParallelBaseVector :: Send ( int dest ) const
-  {
-    NG_MPI_Datatype mpi_t = this->paralleldofs->MyGetMPI_Type(dest);
-    NG_MPI_Send( Memory(), 1, mpi_t, dest, NG_MPI_TAG_SOLVE, ngs_comm);
-  }
-  */
-
 
 
 
@@ -374,7 +352,7 @@ namespace ngla
 			   shared_ptr<ParallelDofs> apd, PARALLEL_STATUS stat) throw()
     : S_BaseVectorPtr<SCAL> (as, aes)
   { 
-    recvvalues = NULL;
+    // recvvalues = NULL;
     if ( apd != 0 )
       {
 	this -> SetParallelDofs ( apd );
@@ -395,7 +373,7 @@ namespace ngla
 			   shared_ptr<ParallelDofs> apd, PARALLEL_STATUS stat) throw()
     : S_BaseVectorPtr<SCAL> (as, aes, adata)
   { 
-    recvvalues = NULL;
+    // recvvalues = NULL;
     if ( apd != 0 )
       {
 	this -> SetParallelDofs ( apd );
@@ -415,7 +393,7 @@ namespace ngla
   template <class SCAL>
   S_ParallelBaseVectorPtr<SCAL> :: ~S_ParallelBaseVectorPtr ()
   {
-    delete recvvalues;
+    ; // delete recvvalues;
   }
 
 
@@ -432,13 +410,14 @@ namespace ngla
     Array<int> exdofs(ntasks);
     for (int i = 0; i < ntasks; i++)
       exdofs[i] = this->es * this->paralleldofs->GetExchangeDofs(i).Size();
-    delete this->recvvalues;
-    this -> recvvalues = new Table<TSCAL> (exdofs);
+    // delete this->recvvalues;
+    // this -> recvvalues = new Table<TSCAL> (exdofs);
+    recvvalues = Table<TSCAL> (exdofs);
 
     // Initiate persistent send/recv requests for vector cumulate operation
-    auto dps = paralleldofs->GetDistantProcs();
-    this->sreqs.SetSize(dps.Size());
-    this->rreqs.SetSize(dps.Size());
+    // auto dps = paralleldofs->GetDistantProcs();
+    // this->sreqs.SetSize(dps.Size());
+    // this->rreqs.SetSize(dps.Size());
   }
 
 
@@ -526,37 +505,17 @@ namespace ngla
 
   
   template <typename SCAL>
-  void S_ParallelBaseVectorPtr<SCAL> :: IRecvVec ( int dest, NG_MPI_Request & request )
+  NgMPI_Request S_ParallelBaseVectorPtr<SCAL> :: IRecvVec ( int dest )
   {
-#ifdef PARALLEL
-    NG_MPI_Datatype NG_MPI_TS = GetMPIType<TSCAL> ();
-    NG_MPI_Irecv( &( (*recvvalues)[dest][0]), 
-	       (*recvvalues)[dest].Size(), 
-	       NG_MPI_TS, dest, 
-	       NG_MPI_TAG_SOLVE, this->paralleldofs->GetCommunicator(), &request);
-#endif
+    return this->paralleldofs->GetCommunicator().IRecv (recvvalues[dest], dest, NG_MPI_TAG_SOLVE);
   }
-
-  /*
-  template <typename SCAL>
-  void S_ParallelBaseVectorPtr<SCAL> :: RecvVec ( int dest)
-  {
-    NG_MPI_Status status;
-
-    NG_MPI_Datatype NG_MPI_TS = MyGetMPIType<TSCAL> ();
-    NG_MPI_Recv( &( (*recvvalues)[dest][0]), 
-	      (*recvvalues)[dest].Size(), 
-	      NG_MPI_TS, dest, 
-	      NG_MPI_TAG_SOLVE, ngs_comm, &status);
-  }
-  */
 
 
   template <typename SCAL>
   void S_ParallelBaseVectorPtr<SCAL> :: AddRecvValues( int sender )
   {
     FlatArray<int> exdofs = paralleldofs->GetExchangeDofs(sender);
-    FlatMatrix<SCAL> rec (exdofs.Size(), this->es, &(*this->recvvalues)[sender][0]);
+    FlatMatrix<SCAL> rec (exdofs.Size(), this->es, &(this->recvvalues)[sender][0]);
     for (int i = 0; i < exdofs.Size(); i++)
       (*this) (exdofs[i]) += rec.Row(i);
   }
@@ -569,11 +528,6 @@ namespace ngla
   {
     return make_unique<S_ParallelBaseVectorPtr<TSCAL>>
       (this->size, this->es, paralleldofs, status);
-    /*
-    S_ParallelBaseVectorPtr<TSCAL> * parvec = 
-      new S_ParallelBaseVectorPtr<TSCAL> (this->size, this->es, paralleldofs, status);
-    return parvec;
-    */
   }
 
   class ParallelMultiVector : public MultiVector
@@ -668,7 +622,6 @@ namespace ngla
 	    sum += L2Norm2 (fv.Row(dof));
       }
       
-    // double globsum = MyMPI_AllReduce (sum, NG_MPI_SUM, paralleldofs->GetCommunicator()); // ngs_comm);
     double globsum = paralleldofs->GetCommunicator().AllReduce (sum, NG_MPI_SUM); 
     return sqrt (globsum);
   }
@@ -694,8 +647,4 @@ namespace ngla
   template class S_ParallelBaseVectorPtr<double>;
   template class S_ParallelBaseVectorPtr<Complex>;
 }
-
-
-
-// #endif
 

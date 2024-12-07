@@ -10,12 +10,19 @@
 
 #define FILE_BASEVECTOR_CPP
 
-#include <la.hpp>
+// #include <la.hpp>
 
-// #ifdef PARALLEL
+#include "basevector.hpp"
+#include "vvector.hpp"
+#include "multivector.hpp"
+
 #include "../parallel/parallelvector.hpp"   // for BlockVector
-// #endif
 
+/*
+#include <bla.hpp>
+#include <paralleldofs.hpp>
+#include <basevector.hpp>
+*/
 
 namespace ngla
 {
@@ -920,7 +927,7 @@ namespace ngla
   {
     if (ownmem)
       {
-        GetMemoryTracer().Free(sizeof(TSCAL) * this->entrysize * this->size);
+        GetMemoryTracer().Free(sizeof(TSCAL) * this->es * this->size);
         delete [] pdata;
       }
   }

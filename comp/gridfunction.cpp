@@ -1,12 +1,13 @@
 #include <ngstd.hpp>
 #include <nginterface.h>
-
+// #include <parallelngs.hpp>
+#include <parallelvector.hpp>
+#include <stdlib.h>
 // #include <comp.hpp>
 #include "gridfunction.hpp"
 #include <multigrid.hpp>
+#include <diagonalmatrix.hpp>  // Projector
 
-#include <parallelngs.hpp>
-#include <stdlib.h>
 
 using namespace ngcomp; 
 
@@ -339,11 +340,14 @@ namespace ngcomp
        });
 
 #ifdef PARALLEL
-    AllReduceDofData (cnti, NG_MPI_SUM, fes->GetParallelDofs());
-    // GetVector(mdcomp).SetParallelStatus(DISTRIBUTED);
-    // GetVector(mdcomp).Cumulate(); 	 
-    (*tempvec).SetParallelStatus(DISTRIBUTED);
-    (*tempvec).Cumulate(); 	 
+    if (fes->GetParallelDofs())
+      {
+        fes->GetParallelDofs()->AllReduceDofData (cnti, NG_MPI_SUM);
+        // GetVector(mdcomp).SetParallelStatus(DISTRIBUTED);
+        // GetVector(mdcomp).Cumulate(); 	 
+        (*tempvec).SetParallelStatus(DISTRIBUTED);
+        (*tempvec).Cumulate();
+      }
 #endif
 
     ParallelForRange
@@ -936,16 +940,16 @@ namespace ngcomp
 	comm.GatherRoot (size_nodes);
 	comm.GatherRoot (size_data);
 
-	Array<NG_MPI_Request> requests;
+	NgMPI_Requests requests;
 
 	Table<Vec<N+1,int> > table_nodes(size_nodes);
 	for (int p = 1; p < ntasks; p++)
-	  requests.Append (comm.IRecv (table_nodes[p], p, 22));
+	  requests += comm.IRecv (table_nodes[p], p, 22);
 
 	Table<SCAL> table_data(size_data);
 	for (int p = 1; p < ntasks; p++)
-	  requests.Append (comm.IRecv (table_data[p], p, 23));
-	MyMPI_WaitAll (requests);
+	  requests += comm.IRecv (table_data[p], p, 23);
+	requests.WaitAll();
 
 	FlatArray<SCAL> data = table_data.AsArray();
 

@@ -5,8 +5,9 @@
 /**************************************************************************/
 
 
-#include <la.hpp>
-
+// #include <la.hpp>
+#include "blockjacobi.hpp"
+#include "paralleldofs.hpp"
 
 namespace ngla
 {
@@ -463,15 +464,15 @@ namespace ngla
 	  });
 
 	// send-recv
-	Array<NG_MPI_Request> rsend(all_dps.Size()), rrecv(all_dps.Size());
+        NgMPI_Requests rsend, rrecv;
 	auto comm = pds.GetCommunicator();
 	for (auto kp : Range(all_dps)) {
-	  rsend[kp] = comm.ISend(send_data[kp], all_dps[kp], NG_MPI_TAG_SOLVE);
-	  rrecv[kp] = comm.IRecv(recv_data[kp], all_dps[kp], NG_MPI_TAG_SOLVE);
+	  rsend += comm.ISend(send_data[kp], all_dps[kp], NG_MPI_TAG_SOLVE);
+	  rrecv += comm.IRecv(recv_data[kp], all_dps[kp], NG_MPI_TAG_SOLVE);
 	}
 
 	// wait for recvs to finish and add to diagonal blocks
-	MyMPI_WaitAll(rrecv);
+	rrecv.WaitAll();
 	sds = 0;
 	iterate_ex_blocks([&](auto block_num, auto block, auto p){
 	    auto pos = all_dps.Pos(p);
@@ -483,7 +484,7 @@ namespace ngla
 	    diag_block += buf_block;
 	  });
 
-	MyMPI_WaitAll(rsend); // wait for sends to finish !!
+	rsend.WaitAll(); // wait for sends to finish !!
       }
     }
 
@@ -1297,6 +1298,25 @@ namespace ngla
   }
 
 
+  template <class TM, class TV_ROW, class TV_COL>
+  shared_ptr<BaseSparseMatrix> BlockJacobiPrecond<TM,TV_ROW,TV_COL> :: 
+  CreateSparseMatrix() const
+  {
+    Array<int> ia, ja;
+    Array<TM> vals;
+    for (size_t i = 0; i < invdiag.Size(); i++)
+      {
+        auto block = (*blocktable)[i];
+        for (int j = 0; j < block.Size(); j++)
+          for (int k = 0; k < block.Size(); k++)
+            {
+              ia += block[j];
+              ja += block[k];
+              vals += invdiag[i](j,k);
+            }
+      }
+    return SparseMatrixTM<TM>::CreateFromCOO (ia, ja, vals, Height(), Width());
+  }
 
 
 

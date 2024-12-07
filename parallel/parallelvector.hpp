@@ -7,16 +7,13 @@
 /* Date:   2007,2011                                                      */
 /* ************************************************************************/
 
-
-
-// #ifdef PARALLEL
+#include <vvector.hpp>
+#include <multivector.hpp>
+#include <paralleldofs.hpp>
 
 namespace ngla
 {
-  // using ngparallel::ParallelDofs;
-  // using ngla::ParallelDofs;
-
-
+  
   class NGS_DLL_HEADER ParallelBaseVector : virtual public BaseVector
   {
   protected:
@@ -24,8 +21,8 @@ namespace ngla
     shared_ptr<ParallelDofs> paralleldofs;    
     shared_ptr<BaseVector> local_vec;
     
-    Array<NG_MPI_Request> sreqs;
-    Array<NG_MPI_Request> rreqs;
+    mutable NgMPI_Requests sreqs;
+    mutable NgMPI_Requests rreqs;
 
   public:
     ParallelBaseVector ()
@@ -86,10 +83,10 @@ namespace ngla
     virtual void Distribute() const override = 0;
     // { cerr << "ERROR -- Distribute called for BaseVector, is not parallel" << endl; }
     
-    virtual void ISend ( int dest, NG_MPI_Request & request ) const;
+    virtual NgMPI_Request ISend ( int dest ) const;
     // virtual void Send ( int dest ) const;
     
-    virtual void IRecvVec ( int dest, NG_MPI_Request & request ) = 0;
+    virtual NgMPI_Request IRecvVec ( int dest ) = 0;
     // { cerr << "ERROR -- IRecvVec called for BaseVector, is not parallel" << endl; }
 
     // virtual void RecvVec ( int dest )
@@ -101,7 +98,6 @@ namespace ngla
     virtual void SetParallelDofs (shared_ptr<ParallelDofs> aparalleldofs) = 0;
     // const Array<int> * procs = 0) = 0;
   };
-
 
 
 
@@ -126,7 +122,7 @@ namespace ngla
       }
     return dynamic_cast<const ParallelBaseVector*> (x);
   }
-  
+
   inline ParallelBaseVector & dynamic_cast_ParallelBaseVector (BaseVector & x)
   {
     // cout << "my dynamic cast" << endl;
@@ -135,6 +131,7 @@ namespace ngla
       return dynamic_cast<ParallelBaseVector&> (**ax);
     return dynamic_cast<ParallelBaseVector&> (x);
   }
+
   inline const ParallelBaseVector & dynamic_cast_ParallelBaseVector (const BaseVector & x)
   {
     // cout << "my dynamic cast" << endl;
@@ -175,7 +172,7 @@ namespace ngla
     using ParallelBaseVector :: sreqs;
     using ParallelBaseVector :: rreqs;
 
-    Table<SCAL> * recvvalues;
+    Table<SCAL> recvvalues;
 
     using S_BaseVectorPtr<TSCAL> :: pdata;
     using ParallelBaseVector :: local_vec;
@@ -192,7 +189,7 @@ namespace ngla
     virtual AutoVector Range (T_Range<size_t> range) const override;
     virtual AutoVector Range (DofRange range) const override;
     
-    virtual void  IRecvVec ( int dest, NG_MPI_Request & request ) override;
+    virtual NgMPI_Request IRecvVec ( int dest ) override;
     // virtual void  RecvVec ( int dest );
     virtual void AddRecvValues( int sender ) override;
     virtual AutoVector CreateVector () const override;
@@ -269,5 +266,4 @@ namespace ngla
   
 }
 
-// #endif
 #endif

@@ -5,7 +5,9 @@
 /***************************************************************************/
 
 
-#include <la.hpp>
+#include "jacobi.hpp"
+#include "paralleldofs.hpp"
+
 
 namespace ngla
 {
@@ -55,7 +57,7 @@ namespace ngla
 		 });
     
     if (paralleldofs!=nullptr && use_par)
-      AllReduceDofData (invdiag, NG_MPI_SUM, paralleldofs);  
+      paralleldofs -> AllReduceDofData (invdiag, NG_MPI_SUM);  
     
     ParallelFor (height, [&](size_t i)
 		 {

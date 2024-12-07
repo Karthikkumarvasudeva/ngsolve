@@ -9,8 +9,6 @@
 
 
 #include <nginterface_v2.hpp>
-#include <core/ranges.hpp>
-
 #include <elementtopology.hpp>
 
 namespace ngfem
@@ -26,7 +24,6 @@ namespace ngcomp
 {
   class PML_Transformation;
   
-  // using ngcore::INT;
   using netgen::Ng_Node;
   using ngfem::ELEMENT_TYPE;
   
@@ -1357,21 +1354,21 @@ namespace ngcomp
       for (auto p : GetDistantProcs(Node(nt, i)))
         dist_data[p][cnt[p]++] = data[i];
 
-    Array<NG_MPI_Request> requests;
+    NgMPI_Requests requests;
     for (auto i : cnt.Range())
       if (cnt[i])
 	{
-	  requests.Append (comm.ISend(dist_data[i], i, NG_MPI_TAG_SOLVE));
-	  requests.Append (comm.IRecv(recv_data[i], i, NG_MPI_TAG_SOLVE));
+	  requests += comm.ISend(dist_data[i], i, NG_MPI_TAG_SOLVE);
+	  requests += comm.IRecv(recv_data[i], i, NG_MPI_TAG_SOLVE);
 	}
-    MyMPI_WaitAll (requests);
+    requests.WaitAll();
     
     cnt = 0;
-    NG_MPI_Datatype type = GetMPIType<T>();
+    auto type = GetMPIType<T>();
     for (auto i : Range(GetNNodes(nt)))
       for (auto p : GetDistantProcs(Node(nt, i)))
         NG_MPI_Reduce_local (&recv_data[p][cnt[p]++],
-                          &data[i], 1, type, op);
+                             &data[i], 1, type, op);
   }
 
 

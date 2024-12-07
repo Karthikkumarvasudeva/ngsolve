@@ -11,6 +11,8 @@
 // #include <comp.hpp>
 #include "fespace.hpp"
 #include <multigrid.hpp>
+#include <diagonalmatrix.hpp>
+#include <special_matrix.hpp>
 
 #include "../fem/h1lofe.hpp"
 #include <bdbequations.hpp>
@@ -128,12 +130,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
       {
         Region dir(ma, BND, flags.GetStringFlag("dirichlet"));
         dirichlet_constraints[BND] |= dir.Mask(); // that's what it was before, can we just assign ? 
-        /*
-        std::regex pattern(flags.GetStringFlag("dirichlet"));
-        for (int i : Range(ma->GetNRegions(BND)))
-          if (std::regex_match (string(ma->GetMaterial(BND, i)), pattern))
-            dirichlet_constraints[BND].SetBit(i);
-        */
       }
 
     dirichlet_constraints[BBND].SetSize (ma->GetNRegions(BBND));
@@ -148,13 +144,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
       {
         Region dir(ma, BBND, flags.GetStringFlag("dirichlet_bbnd"));
         dirichlet_constraints[BBND] |= dir.Mask(); // that's what it was before, can we just assign ? 
-        
-        /*
-        std::regex pattern(flags.GetStringFlag("dirichlet_bbnd"));
-        for (int i : Range(ma->GetNRegions(BBND)))
-          if (std::regex_match (string(ma->GetMaterial(BBND, i)), pattern))
-            dirichlet_constraints[BBND].SetBit(i);
-        */
       }
 
     dirichlet_constraints[BBBND].SetSize (ma->GetNRegions(BBBND));
@@ -169,13 +158,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
       {
         Region dir(ma, BBBND, flags.GetStringFlag("dirichlet_bbbnd"));
         dirichlet_constraints[BBBND] |= dir.Mask(); // that's what it was before, can we just assign ? 
-        /*
-        std::regex pattern(flags.GetStringFlag("dirichlet_bbbnd"));
-        for (int i : Range(ma->GetNRegions(BBBND)))
-          if (std::regex_match (string(ma->GetMaterial(BBBND, i)), pattern))
-            
-            dirichlet_constraints[BBBND].SetBit(i);
-        */
       }
     
     if (flags.NumListFlagDefined("definedon") || 
@@ -330,26 +312,7 @@ lot of new non-zero entries in the matrix!\n" << endl;
       }
     
     level_updated = -1;
-    /*
-    point = NULL;
-    segm = NULL;
-    trig = NULL;
-    quad = NULL;
-    tet = NULL;
-    prism = NULL;
-    pyramid = NULL;
-    hex = NULL;
-    */
-    /*
-    dummy_tet = new DummyFE<ET_TET>();
-    dummy_pyramid = new DummyFE<ET_PYRAMID>();
-    dummy_prism = new DummyFE<ET_PRISM>();
-    dummy_hex = new DummyFE<ET_HEX>();
-    dummy_trig = new DummyFE<ET_TRIG>();
-    dummy_quad = new DummyFE<ET_QUAD>();
-    dummy_segm = new DummyFE<ET_SEGM>();
-    dummy_point = new DummyFE<ET_POINT>();
-    */
+
     for(auto vb : {VOL,BND,BBND})
       {
 	evaluator[vb] = nullptr;
@@ -551,14 +514,11 @@ lot of new non-zero entries in the matrix!\n" << endl;
     */
 
     for (auto vb : { BND, BBND, BBBND })
-      {
-        auto & dc = dirichlet_constraints[int(vb)];
-        if (dc.Size())
-          for (FESpace::Element el : Elements(vb))
-            if (dc[el.GetIndex()])
-              for (int d : el.GetDofs())
-                if (IsRegularDof(d)) dirichlet_dofs.SetBit (d);
-      }
+      if (auto & dc = dirichlet_constraints[int(vb)]; dc.Size())
+        for (FESpace::Element el : Elements(vb))
+          if (dc[el.GetIndex()])
+            for (int d : el.GetDofs())
+              if (IsRegularDof(d)) dirichlet_dofs.SetBit (d);
     
     /*
     Array<DofId> dnums;
@@ -1324,10 +1284,10 @@ lot of new non-zero entries in the matrix!\n" << endl;
         block_dim = block_evaluator->BlockDim();
         evaluator = block_evaluator->BaseDiffOp();
       }
-    auto trial = make_shared<ProxyFunction>(dynamic_pointer_cast<FESpace>(const_cast<FESpace*>(this)->shared_from_this()),
+    auto trial = make_shared<ProxyFunction>(nullptr, // dynamic_pointer_cast<FESpace>(const_cast<FESpace*>(this)->shared_from_this()),
                                             false, false, evaluator,
                                             nullptr, nullptr, nullptr, nullptr, nullptr);
-    auto test  = make_shared<ProxyFunction>(dynamic_pointer_cast<FESpace>(const_cast<FESpace*>(this)->shared_from_this()),
+    auto test  = make_shared<ProxyFunction>(nullptr, // dynamic_pointer_cast<FESpace>(const_cast<FESpace*>(this)->shared_from_this()),
                                             true, false, evaluator,
                                             nullptr, nullptr, nullptr, nullptr, nullptr);
     shared_ptr<BilinearFormIntegrator> bli =
@@ -1586,8 +1546,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
 
   shared_ptr<Table<int>> FESpace :: CreateSmoothingBlocks (const Flags & flags) const
   {
-    // size_t nd = GetNDof();
-
     bool eliminate_internal =
       flags.GetDefineFlag("eliminate_internal") ||
       flags.GetDefineFlag("condense");
@@ -1623,6 +1581,7 @@ lot of new non-zero entries in the matrix!\n" << endl;
         flags.GetStringFlag("blocktype")=="edge" ||
         flags.GetStringFlag("blocktype")=="face" ||
         flags.GetStringFlag("blocktype")=="facet" ||
+        flags.GetStringFlag("blocktype")=="element" ||        
         flags.GetStringFlag("blocktype")=="vertexpatch" ||        
         flags.GetStringFlag("blocktype")=="vertexedge")
       blocktypes += flags.GetStringFlag("blocktype");
@@ -1672,6 +1631,18 @@ lot of new non-zero entries in the matrix!\n" << endl;
                         creator.Add (base+i, d);
                   }
                 base += ma->GetNFaces();
+              }
+
+            if (blocktypes.Contains("element"))
+              {
+                for (int i : Range(ma->GetNE(VOL)))
+                  {
+                    GetDofNrs ( ElementId(VOL,i), dofs);
+                    for (auto d : dofs)
+                      if (IsRegularDof(d))
+                        creator.Add (base+i, d);
+                  }
+                base += ma->GetNE(VOL);
               }
             
             if (blocktypes.Contains("vertexedge"))
@@ -1735,7 +1706,8 @@ lot of new non-zero entries in the matrix!\n" << endl;
                 base += ma->GetNV();                
               }
 
-
+            if (creator.GetMode()==1)
+              creator.SetSize(base);
           }
 
         Table<int> table = creator.MoveTable();
@@ -2253,10 +2225,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
 	  for (auto d : dnums)
 	    if (IsRegularDof(d)) dofnodes[d] = ni;
 	} 
-
-    // paralleldofs = make_shared<ParallelMeshDofs> (ma, dofnodes, dimension, iscomplex);
-    // paralleldofs = make_shared<ParallelDofs>
-    // (ma->GetCommunicator(), Nodes2Table(*ma, dofnodes), dimension, iscomplex);
 
     TableCreator<int> creator(ndof);
     for ( ; !creator.Done(); creator++)
@@ -2877,25 +2845,10 @@ lot of new non-zero entries in the matrix!\n" << endl;
 
     if (order == 0)
     {
-      // tet     = new ScalarFE<ET_TET,0>;
-      // prism   = new FE_Prism0;
-      // pyramid = new FE_Pyramid0;
-      // hex     = new FE_Hex0;
-      // trig    = new ScalarFE<ET_TRIG,0>;
-      // quad    = new ScalarFE<ET_QUAD,0>;
-      // segm    = new FE_Segm0;
-
       n_el_dofs = 1;
     }
     else
     {
-      // tet     = new ScalarFE<ET_TET,1>;
-      // prism   = new FE_Prism1;
-      // pyramid = new FE_Pyramid1;
-      // trig    = new ScalarFE<ET_TRIG,1>;
-      // quad    = new ScalarFE<ET_QUAD,1>;
-      // segm    = new FE_Segm1;
-
       if (ma->GetDimension() == 2)
         n_el_dofs = 4;
       else
@@ -3158,17 +3111,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
     
   }
   
-    /*
-  size_t SurfaceElementFESpace :: GetNDofLevel (int level) const
-  {
-    return ndlevel[level];
-  }
-*/
-
-
-
-
-
 
 
   CompoundFESpace :: CompoundFESpace (shared_ptr<MeshAccess> ama,
@@ -3256,9 +3198,6 @@ lot of new non-zero entries in the matrix!\n" << endl;
       }
 
     SetNDof (cummulative_nd.Last());
-    // while (ma->GetNLevels() > ndlevel.Size())
-    // ndlevel.Append (cummulative_nd.Last());
-
 
     /*
     free_dofs = make_shared<BitArray> (GetNDof());
@@ -3491,7 +3430,7 @@ lot of new non-zero entries in the matrix!\n" << endl;
 
   FiniteElement & CompoundFESpace :: GetFE (ElementId ei, Allocator & alloc) const
   {
-    FlatArray<const FiniteElement*> fea(spaces.Size(), alloc);
+    FlatArray<FiniteElement*> fea(spaces.Size(), alloc);
     if (!all_the_same)
       {
         for (int i = 0; i < fea.Size(); i++)

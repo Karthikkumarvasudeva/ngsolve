@@ -1,6 +1,8 @@
 #include "fespace.hpp"
 #include <parallelngs.hpp>
-
+#include <elementbyelement.hpp>
+#include <diagonalmatrix.hpp>
+#include <special_matrix.hpp>
 
 namespace ngcomp
 {
@@ -181,6 +183,7 @@ namespace ngcomp
 
     auto fill_lam = [&](FESpace::Element & fei, LocalHeap & lh) {
       /** Get Finite Elements / Element Transformation **/
+      HeapReset hr(lh);
       const ElementTransformation & eltrans = fei.GetTrafo();
       ElementId ei(fei);
       const FiniteElement & fela = space_a->GetFE(ei, lh);
@@ -249,10 +252,9 @@ namespace ngcomp
     else // use_simd
       { it_els(fill_lam); }
     tass.Stop();
-#ifdef PARALLEL
     if (space_b->IsParallel() && !localop)
-      { AllReduceDofData (cnt_b, NG_MPI_SUM, space_b->GetParallelDofs()); }
-#endif
+      if (auto pd = space_b->GetParallelDofs(); pd)
+        pd -> AllReduceDofData (cnt_b, NG_MPI_SUM); 
 
     for (auto dofnr : Range(spmat->Height())) {
       if ( (cnt_b[dofnr] > 1) && ( !range_dofs || range_dofs->Test(dofnr) ) ) {
@@ -432,8 +434,8 @@ namespace ngcomp
       auto & felb = space_b->GetFE (ei, lh); int ndb = felb.GetNDof();
       MixedFiniteElement felab(fela, felb);
 
-      FlatMatrix<SCAL> bamat(ndb*dimb, nda*dima, lh), bbmat(ndb*dimb, ndb*dimb, lh),
-	elmat(ndb*dimb, nda*dima, lh);
+      Matrix<SCAL> bamat(ndb*dimb, nda*dima), bbmat(ndb*dimb, ndb*dimb),
+	elmat(ndb*dimb, nda*dima);
 
       simd_guard([&]() {
 	  bamat = 0.0; bbmat = 0.0;
@@ -469,7 +471,7 @@ namespace ngcomp
 
       auto mat = make_shared<ConstantElementByElementMatrix<>>
 	(space_b->GetNDof(), space_a->GetNDof(),
-	 elmat, std::move(bdofs), std::move(adofs));
+	 std::move(elmat), std::move(bdofs), std::move(adofs));
 
       if (op != nullptr)
 	{ op = make_shared<SumMatrix>(op, mat); }
@@ -486,10 +488,9 @@ namespace ngcomp
 	 mat, std::move(ydofs), std::move(xdofs));
     }
 
-#ifdef PARALLEL
     if (space_b->IsParallel() && !localop)
-      { AllReduceDofData (cnt_b, NG_MPI_SUM, space_b->GetParallelDofs()); }
-#endif
+      if (auto pd = space_b->GetParallelDofs(); pd)
+        pd->AllReduceDofData (cnt_b, NG_MPI_SUM);
 
     bool multiple = false;
     for (auto c : cnt_b)

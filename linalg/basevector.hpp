@@ -7,13 +7,33 @@
 /* Date:   7. Feb. 2003                                              */
 /*********************************************************************/
 
-
+#include <bla.hpp>
+#include <core/mpi_wrapper.hpp>
+// #include "paralleldofs.hpp"
 
 namespace ngla
 {
+  using namespace ngbla;
+  
   class BaseVector;
   class AutoVector;
   class MultiVector;
+
+  class ParallelDofs;
+  
+  // class DofRange;
+  class DofRange : public T_Range<size_t>
+  {
+    shared_ptr<ParallelDofs> pardofs;
+  public:
+    DofRange () { }
+    DofRange (T_Range<size_t> range, shared_ptr<ParallelDofs> apardofs)
+      : T_Range<size_t>(range), pardofs(apardofs) { ; }
+    shared_ptr<ParallelDofs> GetParallelDofs() const { return pardofs; }
+  };
+  
+
+  
   
   template <class SCAL> class S_BaseVector;
 
@@ -91,9 +111,6 @@ namespace ngla
     size_t size;
     /// number of doubles per entry
     int entrysize = 1;
-    ///
-    // shared_ptr<ParallelDofs> paralleldofs;
-    
     ///
     BaseVector () { ; }
     
@@ -650,72 +667,6 @@ namespace ngla
   extern template class S_BaseVector<double>;
   extern template class S_BaseVector<Complex>;
 #endif
-
-  /*
-  template <class SCAL>
-  class NGS_DLL_HEADER S_BaseVector;
-
-
-  template <>
-  class NGS_DLL_HEADER S_BaseVector<double> : virtual public BaseVector
-  {
-  public:
-    S_BaseVector () throw () { ; }
-    virtual ~S_BaseVector() { ; }
-
-    S_BaseVector & operator= (double s);
-
-    virtual double InnerProduct (const BaseVector & v2) const;
-
-    virtual FlatVector<double> FVDouble () const;
-    virtual FlatVector<Complex> FVComplex () const;
-
-    virtual FlatVector<double> FVScal () const
-    {
-      return FlatVector<double> (size * entrysize, Memory());
-    }
-
-
-    virtual void GetIndirect (const FlatArray<int> & ind, 
-			      const FlatVector<double> & v) const;
-    virtual void GetIndirect (const FlatArray<int> & ind, 
-			      const FlatVector<Complex> & v) const;
-
-  };
-
-
-
-
-  template <>
-  class NGS_DLL_HEADER S_BaseVector<Complex> : virtual public BaseVector
-  {
-  public:
-    S_BaseVector () throw() { ; }
-    ~S_BaseVector () { ; }
-
-    virtual Complex InnerProduct (const BaseVector & v2) const;
-
-    virtual FlatVector<double> FVDouble () const throw();
-    virtual FlatVector<Complex> FVComplex () const throw();
-    virtual FlatVector<Complex> FVScal () const throw() 
-    {
-      return FlatVector<Complex> (size * entrysize/2, Memory());
-    }
-
-    virtual void GetIndirect (const FlatArray<int> & ind, 
-			      const FlatVector<double> & v) const;
-    virtual void GetIndirect (const FlatArray<int> & ind, 
-			      const FlatVector<Complex> & v) const;
-  };
-
-  */
-
-
-
-
-
-
-
 
 
 
