@@ -4,6 +4,7 @@
 /* Date:   25. Mar. 2000                                              */
 /**********************************************************************/
 
+
 /* 
    Finite Element Space
 */
@@ -325,13 +326,24 @@ lot of new non-zero entries in the matrix!\n" << endl;
 
     // element_coloring = NULL;
     // selement_coloring = NULL;
-    paralleldofs = NULL;
+    // paralleldofs = NULL;
 
     ctofdof.SetSize(0);
 
     for (auto & et : et_bonus_order) et = 0;
     et_bonus_order[ET_QUAD] = int (flags.GetNumFlag("quadbonus",0));
 
+
+    for (auto et : element_types)
+      {
+        string flagname = string(ElementTopology::GetElementName(et)) + "order";
+        std::transform(flagname.begin(), flagname.end(), flagname.begin(), ::tolower);
+        if (flags.NumFlagDefined(flagname))
+          SetOrder (et, int(flags.GetNumFlag(flagname, 0)));
+      }
+
+
+    
     this->GetMemoryTracer().Track(
         dirichlet_dofs, "dirichlet_dofs",
         dirichlet_vertex, "dirichlet_vertex",
@@ -395,6 +407,13 @@ lot of new non-zero entries in the matrix!\n" << endl;
                                "  OLDSTYLE .. as it used to be for the last decade";
     docu.Arg("print") = "bool = False\n"
       "  (historic) print some output into file set by 'SetTestoutFile'";
+    
+    for (auto et : { ET_SEGM, ET_TRIG, ET_QUAD, ET_TET, ET_HEX, ET_PRISM, ET_PYRAMID })
+      {
+        string flagname = string(ElementTopology::GetElementName(et)) + "order";
+        std::transform(flagname.begin(), flagname.end(), flagname.begin(), ::tolower);        
+        docu.Arg(flagname);
+      }
     return docu;
   }
 
@@ -1002,6 +1021,22 @@ lot of new non-zero entries in the matrix!\n" << endl;
   // }
 
 
+
+  void FESpace :: SetOrder (ELEMENT_TYPE et, TORDER order)
+  {
+    if (order_policy == CONSTANT_ORDER || order_policy == OLDSTYLE_ORDER)
+      order_policy = NODE_TYPE_ORDER;
+    et_bonus_order[et] = order - this->order;
+    
+    string flagname = string(ElementTopology::GetElementName(et)) + "order";
+    std::transform(flagname.begin(), flagname.end(), flagname.begin(), ::tolower);        
+    flags.SetFlag(flagname, order);
+    
+    timestamp = 0;  // rerun first_update
+  }
+
+
+  
   void FESpace :: SetOrder (NodeId ni, int order)
   {
     throw Exception (string("FESpace::SetOrder not overloaded for space") + typeid(*this).name());
@@ -2677,13 +2712,14 @@ lot of new non-zero entries in the matrix!\n" << endl;
       }
     */
   }
-  
+
+  /*
   size_t NonconformingFESpace :: GetNDof () const throw()
   {
     // return ma->GetNEdges();
     return ma->GetNFacets();
   }
-
+  */
 
   void NonconformingFESpace :: Update()
   {
@@ -2691,6 +2727,8 @@ lot of new non-zero entries in the matrix!\n" << endl;
     ctofdof = UNUSED_DOF;
     for (auto el : ma->Elements(VOL))
       ctofdof[el.Facets()] = WIREBASKET_DOF;
+
+    SetNDof (ma->GetNFacets());
     
     /*
     if (ma->GetNLevels() > ndlevel.Size())
@@ -2803,12 +2841,13 @@ lot of new non-zero entries in the matrix!\n" << endl;
       }
     throw Exception ("NonconormingFE: only bnd");
   }
-  
+
+  /*
   size_t NonconformingSurfaceFESpace :: GetNDof () const throw()
   {
     return ma->GetNEdges();
   }
-
+  */
 
   void NonconformingSurfaceFESpace :: Update()
   {
@@ -2816,7 +2855,7 @@ lot of new non-zero entries in the matrix!\n" << endl;
     ctofdof = UNUSED_DOF;
     for (auto el : ma->Elements(BND))
       ctofdof[el.Edges()] = WIREBASKET_DOF;
-    
+    SetNDof (ma->GetNEdges()); 
   }
 
   void NonconformingSurfaceFESpace :: GetDofNrs (ElementId ei, Array<int> & dnums) const

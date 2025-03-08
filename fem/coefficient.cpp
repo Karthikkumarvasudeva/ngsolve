@@ -6712,6 +6712,7 @@ class CompiledCoefficientFunction : public CompiledCoefficientFunctionInterface 
             s << " ) {" << endl;
             s << code.header << endl;
             s << "[[maybe_unused]] auto points = mir.GetPoints();" << endl;
+            s << "[[maybe_unused]] auto normals = mir.GetNormals();" << endl;
             s << "[[maybe_unused]] auto domain_index = mir.GetTransformation().GetElementIndex();" << endl;
             s << "for ( auto i : Range(mir)) {" << endl;
             s << "[[maybe_unused]] auto & ip = mir[i];" << endl;
@@ -7568,6 +7569,26 @@ static RegisterClassForArchive<ParameterCoefficientFunction<double>, Coefficient
 static RegisterClassForArchive<ParameterCoefficientFunction<Complex>, CoefficientFunction> regparc;
 static RegisterClassForArchive<PlaceholderCoefficientFunction, CoefficientFunction> regplacholdercf;
 static RegisterClassForArchive<DomainConstantCoefficientFunction, CoefficientFunction> regdccf;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<1>, CoefficientFunction> regmvvs1;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<2>, CoefficientFunction> regmvvs2;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<3>, CoefficientFunction> regmvvs3;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<4>, CoefficientFunction> regmvvs4;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<5>, CoefficientFunction> regmvvs5;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<6>, CoefficientFunction> regmvvs6;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<7>, CoefficientFunction> regmvvs7;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<8>, CoefficientFunction> regmvvs8;
+static RegisterClassForArchive<T_MultVecVecSameCoefficientFunction<9>, CoefficientFunction> regmvvs9;
+
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<1>, CoefficientFunction> regmvv1;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<2>, CoefficientFunction> regmvv2;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<3>, CoefficientFunction> regmvv3;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<4>, CoefficientFunction> regmvv4;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<5>, CoefficientFunction> regmvv5;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<6>, CoefficientFunction> regmvv6;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<7>, CoefficientFunction> regmvv7;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<8>, CoefficientFunction> regmvv8;
+static RegisterClassForArchive<T_MultVecVecCoefficientFunction<9>, CoefficientFunction> regmvv9;
+
 // static RegisterClassForArchive<DomainVariableCoefficientFunction, CoefficientFunction> regdvcf;
 // static RegisterClassForArchive<IntegrationPointCoefficientFunction, CoefficientFunction> regipcf;
 // static RegisterClassForArchive<PolynomialCoefficientFunction, CoefficientFunction> regpolcf;

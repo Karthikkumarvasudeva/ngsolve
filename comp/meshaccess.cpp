@@ -7,6 +7,7 @@
 /* 
    Access to fe mesh
 */
+
 #include <core/register_archive.hpp>
 #ifdef NGS_PYTHON
 #include <core/python_ngcore.hpp>
@@ -23,12 +24,12 @@
 #include "../fem/h1lofe.hpp"
 #include <bdbequations.hpp> 
 #include <regex>
+
+
 namespace ngcomp
 {
 
-
   template <int DIMS, int DIMR, typename BASE> class ALE_ElementTransformation;
-  
   
   // string Ngs_Element::defaultstring = "default";
   template <int DIMS, int DIMR>
@@ -1081,9 +1082,9 @@ namespace ngcomp
     
     // update periodic mappings
     auto nid = mesh.GetNIdentifications();
-    periodic_node_pairs[NT_VERTEX]->SetSize(0);
-    periodic_node_pairs[NT_EDGE]->SetSize(0);
-    periodic_node_pairs[NT_FACE]->SetSize(0);
+    periodic_node_pairs[NT_VERTEX].SetSize(0);
+    periodic_node_pairs[NT_EDGE].SetSize(0);
+    periodic_node_pairs[NT_FACE].SetSize(0);
 
     if (GetCommunicator().Size() > 1 && GetCommunicator().Rank() == 0)
       nid = 0; //hopefully this is enough...
@@ -1093,7 +1094,7 @@ namespace ngcomp
         // only if it is periodic
         if (mesh.GetIdentificationType(idnr)!=2) continue;
         auto pv_buffer = mesh.GetPeriodicVertices(idnr);
-        auto pidnr = periodic_node_pairs[NT_VERTEX]->Append(Array<IVec<2,int>>(pv_buffer.Size(), (IVec<2,int>*) pv_buffer.Release(), true));
+        auto pidnr = periodic_node_pairs[NT_VERTEX].Append(Array<IVec<2,int>>(pv_buffer.Size(), (IVec<2,int>*) pv_buffer.Release(), true));
 
         BitArray corner_vertices(GetNP());
         corner_vertices.Clear();
@@ -1101,7 +1102,7 @@ namespace ngcomp
         Array<int> vertex_map(GetNP());
         for (auto i : Range(GetNP()))
           vertex_map[i] = i;
-        for (const auto& pair : (*periodic_node_pairs[NT_VERTEX])[pidnr])
+        for (const auto& pair : periodic_node_pairs[NT_VERTEX][pidnr])
           {
             vertex_map[pair[1]] = pair[0];
             if(pair[0] == pair[1])
@@ -1127,7 +1128,7 @@ namespace ngcomp
                (mv2 != vts[1] || corner_vertices[vts[1]]))
               count++;
           }
-        periodic_node_pairs[NT_EDGE]->Append(Array<IVec<2>>(count));
+        periodic_node_pairs[NT_EDGE].Append(Array<IVec<2>>(count));
         count = 0;
         for (size_t enr = 0; enr < GetNEdges(); enr++)
           {
@@ -1140,8 +1141,8 @@ namespace ngcomp
               {               
                 if (mv1 > mv2) Swap(mv1,mv2);
                 int menr = vp2e.Get(IVec<2>(mv1,mv2));
-                (*periodic_node_pairs[NT_EDGE])[pidnr][count][0] = menr;
-                (*periodic_node_pairs[NT_EDGE])[pidnr][count++][1] = enr;
+                periodic_node_pairs[NT_EDGE][pidnr][count][0] = menr;
+                periodic_node_pairs[NT_EDGE][pidnr][count++][1] = enr;
               }
           }
         // build vertex-triple to face hashtable
@@ -1165,7 +1166,7 @@ namespace ngcomp
                 count++;
               }
           }
-        periodic_node_pairs[NT_FACE]->Append(Array<IVec<2>>(count));
+        periodic_node_pairs[NT_FACE].Append(Array<IVec<2>>(count));
         count = 0;
         for (auto fnr : Range(GetNFaces()))
           {
@@ -1177,8 +1178,8 @@ namespace ngcomp
               {
                 mv.Sort();
                 int mfnr = v2f[mv];
-                (*periodic_node_pairs[NT_FACE])[pidnr][count][0] = mfnr;
-                (*periodic_node_pairs[NT_FACE])[pidnr][count++][1] = fnr;
+                periodic_node_pairs[NT_FACE][pidnr][count][0] = mfnr;
+                periodic_node_pairs[NT_FACE][pidnr][count++][1] = fnr;
               }
           }
       }
@@ -1405,12 +1406,10 @@ namespace ngcomp
     fnums.SetSize (6);
     orient.SetSize (6);
     int nfa = 
-      Ng_GetElement_Faces (elnr+1, &fnums[0], &orient[0]);
+      // Ng_GetElement_Faces (elnr+1, &fnums[0], &orient[0]);
+      mesh.GetElement_Faces (elnr, &fnums[0], &orient[0]);
     fnums.SetSize (nfa);
     orient.SetSize (nfa);
-
-    for (int i = 0; i < nfa; i++)
-      fnums[i]--;
   }
 
   int MeshAccess :: 
@@ -1423,8 +1422,8 @@ namespace ngcomp
   void MeshAccess :: 
   GetSElFace (int selnr, int & fnum, int & orient) const
   {
-    fnum = Ng_GetSurfaceElement_Face (selnr+1, &orient);
-    fnum--;
+    // fnum = Ng_GetSurfaceElement_Face (selnr+1, &orient);
+    fnum = mesh.GetSurfaceElement_Face (selnr, &orient);
   }
 
   void MeshAccess :: GetFacePNums (int fnr, Array<int> & pnums) const
@@ -1510,7 +1509,7 @@ namespace ngcomp
     elnums.SetSize0();    
     for (auto sel : GetVertexSurfaceElements(v0))
       {
-        int sface = Ng_GetSurfaceElement_Face (sel+1)-1;
+        int sface = GetSElFace(sel);
         if (sface == fnr)
           elnums.Append (sel);
       }
@@ -2021,12 +2020,13 @@ namespace ngcomp
       }
   }
 
-
+  /*
   void MeshAccess :: SetPointSearchStartElement(const int el) const
   {
     Ng_SetPointSearchStartElement(el+1);
   }
-
+  */
+  
   ElementId MeshAccess :: FindElementOfPoint (FlatVector<double> point,
 					IntegrationPoint & ip, 
 					bool build_searchtree,
@@ -2185,6 +2185,7 @@ namespace ngcomp
     return mesh.GetCurveOrder();
   }
 
+  /*
   int MeshAccess :: GetNPairsPeriodicVertices () const 
   {
     return Ng_GetNPeriodicVertices(0);
@@ -2226,11 +2227,12 @@ namespace ngcomp
 	pairs[i][1]--;
       }
   }
-
+  */
+  
   size_t MeshAccess :: GetNPeriodicNodes(NODE_TYPE nt) const
   {
     size_t npairs = 0;
-    for(const auto& ar : (*periodic_node_pairs[nt]))
+    for(const auto& ar : periodic_node_pairs[nt])
       npairs += ar.Size();
     return npairs;
   }
@@ -2239,19 +2241,19 @@ namespace ngcomp
   {
     pairs.SetSize(0);
     pairs.SetAllocSize(GetNPeriodicNodes(nt));
-    for(const auto& ar : (*periodic_node_pairs[nt]))
+    for(const auto& ar : periodic_node_pairs[nt])
       for(const auto& val : ar)
         pairs.Append(val);
   }
 
   const Array<IVec<2>> & MeshAccess :: GetPeriodicNodes (NODE_TYPE nt, int idnr) const
   {
-    if(idnr > periodic_node_pairs[nt]->Size())
+    if(idnr > periodic_node_pairs[nt].Size())
       throw Exception("Not enough periodic identifications, GetPeriodicNodes is 0 based and has only periodic Identifications!");
-    return (*periodic_node_pairs[nt])[idnr];
+    return periodic_node_pairs[nt][idnr];
   }
 
-
+  /*
   int MeshAccess :: GetNPairsPeriodicEdges () const 
   {
     return Ng_GetNPeriodicEdges(0);
@@ -2291,7 +2293,8 @@ namespace ngcomp
 	pairs[i][1]--;
       }
   }
-
+  */
+  
   void MeshAccess::GetVertexSurfaceElements (size_t vnr, Array<int> & elems) const
   {
     elems = GetVertexSurfaceElements(vnr);
@@ -2316,7 +2319,7 @@ namespace ngcomp
     higher_integration_order[elnr] = false;
   }
 
-
+  /*
   void MeshAccess :: InitPointCurve(double red, double green, double blue) const
   {
     Ng_InitPointCurve(red, green, blue);
@@ -2326,7 +2329,7 @@ namespace ngcomp
   {
     Ng_AddPointCurvePoint(&(point(0)));
   }
-
+  */
 
   const Table<size_t> & MeshAccess :: GetElementsOfClass (VorB vb) const
   {
@@ -2662,15 +2665,17 @@ namespace ngcomp
   
 
 #ifdef PARALLEL
- 
+
+  /*
   size_t MeshAccess ::GetGlobalNodeNum (NodeId node) const
   {
-    /** There is only one global node **/
+    // There is only one global node
     if (node.GetType() == NT_GLOBAL)
       { return 0; }
     int glob = NgPar_GetGlobalNodeNum (node.GetType(), node.GetNr());
     return glob;
   }
+*/
 
   size_t MeshAccess :: GetGlobalVertexNum (int locnum) const
   {
@@ -2709,14 +2714,16 @@ namespace ngcomp
 
 #else
 
+  /*
   size_t MeshAccess ::GetGlobalNodeNum (NodeId node) const  
   {
     return -1;
   }
-
+  */
+  
   void MeshAccess :: GetDistantProcs (NodeId node, Array<int> & procs) const
   {
-    procs.SetSize (0);
+    procs.SetSize0();
   }
 #endif
 

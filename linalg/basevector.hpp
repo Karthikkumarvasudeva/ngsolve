@@ -21,7 +21,6 @@ namespace ngla
 
   class ParallelDofs;
   
-  // class DofRange;
   class DofRange : public T_Range<size_t>
   {
     shared_ptr<ParallelDofs> pardofs;
@@ -29,6 +28,8 @@ namespace ngla
     DofRange () { }
     DofRange (T_Range<size_t> range, shared_ptr<ParallelDofs> apardofs)
       : T_Range<size_t>(range), pardofs(apardofs) { ; }
+    DofRange (size_t end, shared_ptr<ParallelDofs> apardofs)
+      : T_Range<size_t>(0, end), pardofs(apardofs) { ; }
     shared_ptr<ParallelDofs> GetParallelDofs() const { return pardofs; }
   };
   
@@ -282,6 +283,7 @@ namespace ngla
     virtual void SetRandom ();
 
     inline AutoVector Range (size_t begin, size_t end) const;
+    inline AutoVector Range (size_t end) const;
     // { return Range(T_Range(begin, end)); }
     virtual AutoVector Range (T_Range<size_t> range) const;
     virtual AutoVector Range (DofRange range) const;
@@ -451,6 +453,7 @@ namespace ngla
     operator const BaseVector & () const { return *vec; }
 
     AutoVector Range (size_t begin, size_t end) const { return vec->Range(begin,end); }
+    AutoVector Range (size_t end) const { return vec->Range(0,end); }
     AutoVector Range (T_Range<size_t> range) const { return vec->Range(range); }
     
     template <typename T>
@@ -588,6 +591,11 @@ namespace ngla
     return Range(T_Range(begin, end));
   }
 
+  AutoVector BaseVector::Range (size_t end) const
+  {
+    return Range (0, end);
+  }
+  
 
   template <>
   inline FlatVector<double> BaseVector::FV<double> () const
@@ -772,14 +780,20 @@ namespace ngla
   };
 
 
-
+  /*
   inline VVecExpr<VSumExpr<VVecExpr<BaseVector>, VVecExpr<BaseVector> > >
   operator+ (const BaseVector & a, const BaseVector & b)
   {
     typedef VSumExpr<VVecExpr<BaseVector>, VVecExpr<BaseVector> > TRES;
     return TRES (a, b);
   }
+  */
+  inline auto operator+ (const BaseVector & a, const BaseVector & b)
+  {
+    return VVecExpr<VSumExpr<VVecExpr<BaseVector>,VVecExpr<BaseVector>>>{{a,b}};
+  }
 
+  /*
   template <class TA>
   inline VVecExpr<VSumExpr<VVecExpr<TA>, VVecExpr<BaseVector> > >
   operator+ (const VVecExpr<TA> & a, const BaseVector & b)
@@ -787,6 +801,13 @@ namespace ngla
     typedef VSumExpr<VVecExpr<TA>, VVecExpr<BaseVector> > TRES;
     return TRES (a, b);
   }
+  */
+  template <class TA>
+  inline auto operator+ (const VVecExpr<TA> & a, const BaseVector & b)
+  {
+    return VSumExpr<VVecExpr<TA>,VVecExpr<BaseVector>> (a,b);
+  }
+  
 
   template <class TB>
   inline VVecExpr<VSumExpr<VVecExpr<BaseVector>, VVecExpr<TB> > >
